@@ -1,76 +1,84 @@
 # Seth Pearson #
 # 11/15/2026 #
-import csv
-import nltk
-from nltk.corpus import movie_reviews
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
-nltk.download("movie_reviews", quiet=True)
+from sentiment_analyzer import train_model, clean_text
 
-def clean_text(text):
-    text = text.lower()
-    return text
+from sklearn.metrics import accuracy_score
 
-def load_dataset():
-    reviews = []
-    labels = []
+vectorizer, model = train_model()
 
-    for category in movie_reviews.categories():
-        for file_id in movie_reviews.fileids(category):
-            reviews.append(movie_reviews.raw(file_id))
-            labels.append(category)
+challenge_reviews = [
+    ("Negation", "The movie was not bad at all.", "pos"),
+    ("Negation", "I didn't dislike the characters.", "pos"),
+    ("Negation", "It was not nearly as boring as expected.", "pos"),
+    ("Negation", "I can't say I hated this film.", "pos"),
+    ("Negation", "Not only was it funny, it was moving.", "pos"),
 
-    return reviews, labels
+    ("Sarcasm", "Wonderful, another three hours of nothing happening.", "neg"),
+    ("Sarcasm", "Brilliant acting, if wooden expressions count.", "neg"),
+    ("Sarcasm", "I loved waiting forever for the plot to start.", "neg"),
+    ("Sarcasm", "What a masterpiece of wasted time.", "neg"),
+    ("Sarcasm", "Fantastic effects, said no one after seeing them.", "neg"),
 
-def train_model():
-    reviews, labels = load_dataset()
+    ("Mixed", "The acting was great, but the story was terrible.", "neg"),
+    ("Mixed", "The movie looked beautiful but had a boring plot.", "neg"),
+    ("Mixed", "The story was interesting, and the acting was excellent.", "pos"),
+    ("Mixed", "Some scenes were funny, but most were disappointing.", "neg"),
+    ("Mixed", "The music was wonderful and the characters were memorable.", "pos"),
 
-    with open("sentiment_data.csv", "w", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-        writer.writerow(["Review", "Sentiment"])
+    ("Intensity", "This was an absolutely amazing movie.", "pos"),
+    ("Intensity", "The acting was unbelievably terrible.", "neg"),
+    ("Intensity", "I completely loved every minute of this film.", "pos"),
+    ("Intensity", "This was the most awful movie I have ever seen.", "neg"),
+    ("Intensity", "The movie was incredibly entertaining.", "pos"),
 
-        for review, label in zip(reviews, labels):
-            writer.writerow([review, label])
+    ("Domain Shift", "The customer service was excellent.", "pos"),
+    ("Domain Shift", "The food was cold and tasted horrible.", "neg"),
+    ("Domain Shift", "The new phone works perfectly.", "pos"),
+    ("Domain Shift", "The hotel room was dirty and uncomfortable.", "neg"),
+    ("Domain Shift", "The delivery was late and the package was damaged.", "neg")
+]
 
-    print("Data sheet created: sentiment_data.csv")
-    print("Total reviews:", len(reviews))
-    print("Positive reviews:", labels.count("pos"))
-    print("Negative reviews:", labels.count("neg"))
+categories = {}
 
-    cleaned_reviews = [clean_text(review) for review in reviews]
+print("\nChallenge Set Results")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        cleaned_reviews,
-        labels,
-        test_size=0.20,
-        random_state=42,
-        stratify=labels
+for category, review, actual in challenge_reviews:
+    cleaned = clean_text(review)
+    transformed = vectorizer.transform([cleaned])
+    prediction = model.predict(transformed)[0]
+
+    if category not in categories:
+        categories[category] = {"correct": 0, "total": 0}
+
+    categories[category]["total"] += 1
+
+    if prediction == actual:
+        categories[category]["correct"] += 1
+
+    print("\nCategory:", category)
+    print("Review:", review)
+    print("Expected:", actual)
+    print("Predicted:", prediction)
+
+print("\nChallenge Accuracy by Category")
+
+for category, results in categories.items():
+    accuracy = results["correct"] / results["total"] * 100
+
+    print(
+        category,
+        ":", 
+        results["correct"],
+        "/",
+        results["total"],
+        "correct -",
+        round(accuracy, 2),
+        "%"
     )
 
-    vectorizer = TfidfVectorizer(
-        stop_words="english",
-        max_features=20000
-    )
+total_correct = sum(item["correct"] for item in categories.values())
+total_reviews = sum(item["total"] for item in categories.values())
 
-    X_train_vectorized = vectorizer.fit_transform(X_train)
-    X_test_vectorized = vectorizer.transform(X_test)
-
-    model = LogisticRegression(max_iter=1000)
-    model.fit(X_train_vectorized, y_train)
-
-    predictions = model.predict(X_test_vectorized)
-
-    print("\nNormal Review Results")
-    print("Accuracy:", accuracy_score(y_test, predictions))
-    print("Confusion Matrix:")
-    print(confusion_matrix(y_test, predictions))
-    print("\nClassification Report:")
-    print(classification_report(y_test, predictions))
-
-    return vectorizer, model
-
-if __name__ == "__main__":
-    train_model()
+print("\nOverall Challenge Accuracy:")
+print(round(total_correct / total_reviews * 100, 2), "%")
